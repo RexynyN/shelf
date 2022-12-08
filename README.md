@@ -1,11 +1,11 @@
 # Shelf 
-A nifty CLI tool for file system power user 
+*A nifty CLI tool for the file system power user* 
 
 --- 
 
 ### Status
 
-**There's no stable releases at the moment, use the source code at your own risk.**
+***There are no stable releases at the moment, use the source code at your own risk.***
 
 ### TODOS: 
 
