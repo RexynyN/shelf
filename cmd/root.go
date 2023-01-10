@@ -6,8 +6,8 @@ package cmd
 import (
 	"os"
 
-	"glow/cmd/file"
-	"glow/cmd/singles"
+	"shelf/cmd/file"
+	"shelf/cmd/singles"
 
 	"github.com/spf13/cobra"
 )

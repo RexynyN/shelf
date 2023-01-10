@@ -21,7 +21,7 @@ func init() {
 
 func iAmHim() string {
 	return `
-	I am the Glow CLI tool, made for everything you need (and everything you don't need too!) 
+	I am the Shelf CLI tool, made to handle files and folders.
 
 	I was created by the handsome (and single) Breno Nogueira, a brazilian student who 
 	should really focus in one programming language and finish his projects.
@@ -30,19 +30,15 @@ func iAmHim() string {
 	creator just made me out of pure boredom and his obssession with automating things that
 	are better not automated. 
 	
-	Also, I'm named upon the best party in the best campus of the best university ever. 
-	I am a computer, I just work with facts. 
-	
 	If you want to visit my home to find help, report a misconduct in my actions (you humans call it bugs),
 	or want to help me grow by feeding me more code, here's the address:
 
-	https://github.com/RexynyN/glow
+	https://github.com/RexynyN/shelf
 
 	If you want to find my creator and shame him for his rank in competitive games and his inability to
 	finish any of his writing projects, or just to find a new programming friend, here's how to find him:
 
 	Twitter: @breno_nogs
-	Instagram: @breno.nogs
 	GitHub: RexynyN
 	Discord: RexynyN#7795
 	
@@ -50,6 +46,6 @@ func iAmHim() string {
 	so throw a thank you text at him, it would make his day! 
 
 	Beep boop, pleased to meet you!
-	Glow CLI Tool
+	Shelf CLI Tool
 	`
 }

@@ -1,4 +1,4 @@
-module glow
+module shelf
 
 go 1.19
 

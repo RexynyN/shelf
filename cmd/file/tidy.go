@@ -5,13 +5,13 @@ import "github.com/spf13/cobra"
 var TidyCmd = &cobra.Command{
 	Use:     "rename",
 	Short:   "Rename a file or a directory of files using various utilities.",
-	Example: "glow file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nglow file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
+	Example: "shelf file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nglow file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
 	Long:    ``,
 	Run:     runTidy,
 }
 
 func runTidy(cmd *cobra.Command, args []string) {
-
+	
 }
 
 // Initialize the command
