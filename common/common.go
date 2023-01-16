@@ -66,8 +66,11 @@ func ReadFilesRecursive(path string) (files []os.FileInfo, paths []string) {
 			if err != nil {
 				return err
 			}
-			files = append(files, info)
-			paths = append(paths, path)
+
+			if !info.IsDir() {
+				files = append(files, info)
+				paths = append(paths, path)
+			}
 			return nil
 		})
 	if err != nil {

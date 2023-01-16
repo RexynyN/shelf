@@ -72,7 +72,7 @@ def check_for_duplicates(paths, hash=hashlib.sha1):
                 continue
 
     # For all files with the hash on the 1st 1024 bytes, get their hash on the full file - collisions will be duplicates
-    for __, files_list in hashes_on_1k.items():
+    for _, files_list in hashes_on_1k.items():
         if len(files_list) < 2:
             continue    # this hash of fist 1k file bytes is unique, no need to spend cpy cycles on it
 
@@ -80,6 +80,7 @@ def check_for_duplicates(paths, hash=hashlib.sha1):
             try: 
                 full_hash = get_hash(filename, first_chunk_only=False)
                 duplicate = hashes_full.get(full_hash)
+                
                 if duplicate:
                     print("Duplicate found: {} and {}".format(filename, duplicate))
                 else:

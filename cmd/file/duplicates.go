@@ -2,7 +2,7 @@ package file
 
 import (
 	"crypto/sha1"
-	"encoding/hex"
+	"io"
 	"log"
 	"os"
 	"shelf/common"
@@ -12,14 +12,14 @@ import (
 )
 
 var DuplicateCmd = &cobra.Command{
-	Use:     "duplicate",
+	Use:     "duplicates",
 	Short:   "Rename a file or a directory of files using various utilities.",
 	Example: "glow file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nglow file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
 	Long:    ``,
-	Run:     runDuplicate,
+	Run:     runDuplicates,
 }
 
-func runDuplicate(cmd *cobra.Command, args []string) {
+func runDuplicates(cmd *cobra.Command, args []string) {
 	var files []os.FileInfo
 	var paths []string
 	// Gets the pool of files to handle
@@ -37,7 +37,7 @@ func runDuplicate(cmd *cobra.Command, args []string) {
 
 	// 2. For files with the same size, create a hash table with the hash of their first 1024 bytes; non-colliding elements are unique
 	hash_1k := make(map[string][]string)
-	for size, files := range hash_size {
+	for _, files := range hash_size {
 		if len(files) < 2 {
 			continue
 		}
@@ -48,7 +48,24 @@ func runDuplicate(cmd *cobra.Command, args []string) {
 	}
 
 	// 3. For files with the same hash on the first 1k bytes, calculate the hash on the full contents - files with matching ones are NOT unique.
+	hash_full := make(map[string]string)
+	for _, files := range hash_1k {
+		if len(files) < 2 {
+			continue // This hash is unique, no files has the same
+		}
 
+		for _, filename := range files {
+			fullHash := getHash(filename, false)
+			duplicate, ok := hash_full[fullHash]
+
+			// If the duplicate exists
+			if ok {
+				color.Green("Duplicate found: %s and %s\n", filename, duplicate)
+			} else {
+				hash_full[fullHash] = filename
+			}
+		}
+	}
 }
 
 // Initialize the command
@@ -69,9 +86,8 @@ func init() {
 }
 
 // Get the hash of a file
-// https://gist.github.com/josephspurrier/e714fa55ae4c5ddfa668
 func getHash(path string, firstChunk bool) string {
-	// Open file for
+	// Open file
 	file, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -88,16 +104,14 @@ func getHash(path string, firstChunk bool) string {
 		}
 		hash.Write(bytesSlice)
 	} else {
-		// Read all the bytes
-		bytes, err := os.ReadFile(path)
+		// Get all the file contents and make a hash
+		hash := sha1.New()
+		io.Copy(hash, file)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		hash.Write(bytes)
 	}
-
-	sha1_hash := hex.EncodeToString(hash.Sum(nil))
-
-	return sha1_hash
+	// Digest the hash
+	sha1_hash := hash.Sum(nil)
+	return string(sha1_hash)
 }
