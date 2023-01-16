@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
+	"shelf/config"
 	"strings"
 )
 
@@ -58,6 +60,24 @@ func checkExtension(name string, extensions []string) (sentinel bool) {
 	return
 }
 
+func ReadFilesRecursive(path string) (files []os.FileInfo, paths []string) {
+	err := filepath.Walk(path,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			files = append(files, info)
+			paths = append(paths, path)
+			return nil
+		})
+	if err != nil {
+		log.Println(err)
+		return files, paths
+	}
+
+	return files, paths
+}
+
 func GetCwd() string {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -73,7 +93,7 @@ func GetExePath() string {
 		panic(err)
 	}
 
-	return strings.ReplaceAll(cwd, "glow.exe", "")
+	return strings.ReplaceAll(cwd, config.AppConfig.AppName+".exe", "")
 }
 
 func GetFileExtension(filename string) string {
