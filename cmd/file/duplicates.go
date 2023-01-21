@@ -13,8 +13,8 @@ import (
 
 var DuplicateCmd = &cobra.Command{
 	Use:     "duplicates",
-	Short:   "Rename a file or a directory of files using various utilities.",
-	Example: "glow file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nglow file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
+	Short:   "Find duplicated files using a set of utilities for more precise or loose parameters.",
+	Example: "// TODO",
 	Long:    ``,
 	Run:     runDuplicates,
 }
@@ -51,7 +51,7 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 	hash_full := make(map[string]string)
 	for _, files := range hash_1k {
 		if len(files) < 2 {
-			continue // This hash is unique, no files has the same
+			continue // This hash is unique, no files in the map has the same
 		}
 
 		for _, filename := range files {
@@ -74,8 +74,9 @@ func init() {
 	DuplicateCmd.Flags().BoolP("search", "s", false, "Search recursively within the current directory for duplicates.")
 
 	// Fate of the duplicates
-	DuplicateCmd.Flags().BoolP("quarantine", "q", true, "Quarantines the duplicates in a subdirectory to be manually handled.")
-	DuplicateCmd.Flags().BoolP("remove", "r", false, color.RedString("Delete all duplicates (cannot be undone, be sure of what you're doing)"))
+	DuplicateCmd.Flags().BoolP("quarantine", "q", false, "Quarantines the duplicates in a subdirectory to be manually handled.")
+	DuplicateCmd.Flags().BoolP("remove", "r", false, color.RedString("Deletes all duplicates (cannot be undone, be sure of what you're doing)"))
+	DuplicateCmd.Flags().BoolP("print", "p", true, "Prints the names of the found duplicates on screen.")
 
 	// Security
 	DuplicateCmd.Flags().BoolP("enforce", "e", false, "Enforces the files are down-to-the-byte clones to apply its fate.")
