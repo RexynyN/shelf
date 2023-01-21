@@ -7,12 +7,11 @@ package file
 import (
 	"encoding/json"
 	"fmt"
-	"shelf/common"
-	"io/fs"
 	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"shelf/common"
 	"strings"
 
 	"github.com/fatih/color"
@@ -220,9 +219,9 @@ func iterateFiles(files []string, toValue string, iterate string) []string {
 }
 
 // Get the filename of the given directory of files
-func getFileNames(files []fs.FileInfo) (filenames []string) {
+func getFileNames(files []common.FileStats) (filenames []string) {
 	for _, file := range files {
-		filenames = append(filenames, file.Name())
+		filenames = append(filenames, file.Info.Name())
 	}
 	return
 }
@@ -270,9 +269,9 @@ func filesToCase(files []string, toCase func(string) string) (filenames []string
 }
 
 // Filter files given a func
-func filterFiles(files []fs.FileInfo, filter func(string) bool) (filtered []fs.FileInfo) {
+func filterFiles(files []common.FileStats, filter func(string) bool) (filtered []common.FileStats) {
 	for _, file := range files {
-		if filter(file.Name()) {
+		if filter(file.Info.Name()) {
 			filtered = append(filtered, file)
 		}
 	}

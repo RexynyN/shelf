@@ -2,6 +2,7 @@ package common
 
 import (
 	"encoding/base64"
+	"errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -10,7 +11,12 @@ import (
 	"strings"
 )
 
-func ReadFiles(path string) (files []os.FileInfo) {
+type FileStats struct {
+	Info os.FileInfo
+	Path string
+}
+
+func ReadFiles(path string) (files []FileStats) {
 	dirFiles, err := ioutil.ReadDir(path)
 	if err != nil {
 		log.Fatal(err)
@@ -18,7 +24,10 @@ func ReadFiles(path string) (files []os.FileInfo) {
 
 	for _, file := range dirFiles {
 		if !file.IsDir() {
-			files = append(files, file)
+			files = append(files, FileStats{
+				Info: file,
+				Path: path + file.Name(),
+			})
 		}
 	}
 
@@ -60,7 +69,7 @@ func checkExtension(name string, extensions []string) (sentinel bool) {
 	return
 }
 
-func ReadFilesRecursive(path string) (files []os.FileInfo, paths []string) {
+func ReadFilesRecursive(path string) (files []FileStats) {
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -68,17 +77,19 @@ func ReadFilesRecursive(path string) (files []os.FileInfo, paths []string) {
 			}
 
 			if !info.IsDir() {
-				files = append(files, info)
-				paths = append(paths, path)
+				files = append(files, FileStats{
+					Info: info,
+					Path: path,
+				})
 			}
 			return nil
 		})
 	if err != nil {
 		log.Println(err)
-		return files, paths
+		return files
 	}
 
-	return files, paths
+	return files
 }
 
 func GetCwd() string {
@@ -109,4 +120,13 @@ func GetPureFilename(filename string) string {
 
 func ToBase64(b []byte) string {
 	return base64.StdEncoding.EncodeToString(b)
+}
+
+func CreatePath(path string) {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(path, os.ModePerm)
+		if err != nil {
+			log.Fatal("Couldn't create the specified path")
+		}
+	}
 }
