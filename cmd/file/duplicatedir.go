@@ -13,7 +13,7 @@ import (
 // }
 
 func runDuplicateDir(cmd *cobra.Command, args []string) {
-
+	return
 }
 
 // Initialize the command
