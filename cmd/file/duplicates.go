@@ -27,6 +27,9 @@ var DuplicateCmd = &cobra.Command{
 	Run:     runDuplicates,
 }
 
+var CWD string = common.GetCwd()
+var files []common.FileStats
+
 // Initialize the command
 func init() {
 	// Constraints
@@ -46,40 +49,46 @@ func init() {
 }
 
 func runDuplicates(cmd *cobra.Command, args []string) {
-	var CWD string = common.GetCwd()
-	var files []common.FileStats
 
+	var full int = 0
+	var partial int = 0
 	// Gets the pool of files to handle
+	color.Cyan("Reading files...")
 	if search, _ := cmd.Flags().GetBool("search"); search {
 		files = common.ReadFilesRecursive(CWD)
 	} else {
 		files = common.ReadFiles(CWD)
 	}
 
+	color.Cyan("Size hashing...")
 	// 1. Buildup a hash table of the files, where the filesize is the key.
 	hash_size := make(map[int64][]common.FileStats)
 	for i := range files {
 		hash_size[files[i].Info.Size()] = append(hash_size[files[i].Info.Size()], files[i])
 	}
 
+	color.Cyan("Byte hashing...")
 	// 2. For files with the same size, create a hash table with the hash of their first 1024 bytes; non-colliding elements are unique
 	hash_1k := make(map[string][]common.FileStats)
 	for _, files := range hash_size {
 		if len(files) < 2 {
 			continue
 		}
+
+		partial += len(files)
 		for _, stats := range files {
 			hashSmall := getHash(stats.Path, true)
 			hash_1k[hashSmall] = append(hash_1k[hashSmall], stats)
 		}
 	}
 
-	// 3. For files with the same hash on the first 1k bytes, calculate the hash on the full contents - files with matching ones are NOT unique.
 	printDups, _ := cmd.Flags().GetBool("quiet")
 	printDups = !printDups
 
+	// 3. For files with the same hash on the first 1k bytes, calculate the hash on the full contents - files with matching ones are NOT unique.
 	duplicates := make(map[string][]common.FileStats)
 	hash_full := make(map[string]common.FileStats)
+	color.Cyan("Searching for duplicates through Hashes...")
 	for _, files := range hash_1k {
 		if len(files) < 2 {
 			continue // This hash is unique, no files in the map has the same
@@ -95,6 +104,7 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 			if ok {
 				// Print the result
 				if printDups {
+					full++
 					original := strings.ReplaceAll(stats.Path, CWD, "")
 					dup := strings.ReplaceAll(duplicate.Path, CWD, "")
 					color.Green("Duplicate found: %s and %s\n", dup, original)
@@ -106,6 +116,9 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
+
+	fmt.Println("Partial ", partial)
+	fmt.Println("Full ", full)
 
 	// Fate of the duplicates
 	// Quarantine them
@@ -164,14 +177,20 @@ func getHash(path string, firstChunk bool) string {
 	if firstChunk {
 		// Read the first 1024 bytes
 		bytesSlice := make([]byte, 1024)
-		_, err = file.Read(bytesSlice)
-		if err != nil {
-			log.Fatal(err)
+		read, err := file.Read(bytesSlice)
+
+		// 1024 bytes is an arbitrary number, but a file may have less than 1024 bytes
+		// so make an extra case for that.
+		if err != nil && read < 1024 {
+			bytesSlice = make([]byte, read)
+			file.Read(bytesSlice)
+		} else if err != nil {
+			log.Fatal(err) // Log if any other error occured
 		}
+
 		hash.Write(bytesSlice)
 	} else {
 		// Get all the file contents and make a hash
-		hash := sha1.New()
 		io.Copy(hash, file)
 		if err != nil {
 			log.Fatal(err)
@@ -179,5 +198,6 @@ func getHash(path string, firstChunk bool) string {
 	}
 	// Digest the hash
 	sha1_hash := hash.Sum(nil)
+	fmt.Println(string(sha1_hash))
 	return string(sha1_hash)
 }

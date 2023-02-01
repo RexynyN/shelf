@@ -19,14 +19,14 @@ type FileStats struct {
 func ReadFiles(path string) (files []FileStats) {
 	dirFiles, err := ioutil.ReadDir(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	for _, file := range dirFiles {
 		if !file.IsDir() {
 			files = append(files, FileStats{
 				Info: file,
-				Path: path + file.Name(),
+				Path: filepath.Join(path, file.Name()),
 			})
 		}
 	}
@@ -84,9 +84,9 @@ func ReadFilesRecursive(path string) (files []FileStats) {
 			}
 			return nil
 		})
+
 	if err != nil {
-		log.Println(err)
-		return files
+		log.Panic(err)
 	}
 
 	return files
