@@ -198,6 +198,5 @@ func getHash(path string, firstChunk bool) string {
 	}
 	// Digest the hash
 	sha1_hash := hash.Sum(nil)
-	fmt.Println(string(sha1_hash))
 	return string(sha1_hash)
 }
