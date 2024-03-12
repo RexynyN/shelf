@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"shelf/common"
+	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -35,6 +36,7 @@ func init() {
 	// Constraints
 	DuplicateCmd.Flags().BoolP("search", "s", false, "Search recursively within the current directory for duplicates.")
 	DuplicateCmd.Flags().Bool("quiet", false, "Hides all logs of found duplicates, just prints essencial information")
+	DuplicateCmd.Flags().BoolP("name", "n", false, "Search for same-name files (homonymous) within the directory, including files with a number suffix. Eg. 'file (1).jpg'")
 
 	// Fate of the duplicates
 	DuplicateCmd.Flags().BoolP("quarantine", "q", false, "Quarantines the duplicates in a subdirectory to be manually handled.")
@@ -45,11 +47,43 @@ func init() {
 
 	// Methods of finding duplicates
 	// DuplicateCmd.Flags().BoolP("enforce", "e", false, "Enforces the files are down-to-the-byte clones to apply its fate.")
-	// DuplicateCmd.Flags().BoolP("enforce", "e", false, "Enforces the files are down-to-the-byte clones to apply its fate.")
+}
+
+func detectDupNumbering(filename string) (bool, string) {
+	name := common.GetPureFilename(filename)
+	if !strings.HasSuffix(name, ")") || !strings.Contains(name, "(") {
+		return false, filename
+	}
+
+	// Get the content of the last parenthesis to confirm if it is a number
+	parStart, parEnd := strings.LastIndex(name, "("), strings.LastIndex(name, ")")
+	content := name[parStart+1 : parEnd]
+	if _, err := strconv.Atoi(content); err != nil {
+		return false, filename
+	}
+	return true, strings.TrimSpace(strings.ReplaceAll(filename, "("+content+")", ""))
+}
+
+func sameNameDup(files []common.FileStats) {
+	namedDups := make(map[string][]string)
+	for len(files) != 0 {
+		_, original := detectDupNumbering(files[0].Filename)
+		namedDups[original] = append(namedDups[original], files[0].Path)
+		for _, file := range files {
+			if strings.HasPrefix(file.Filename, original) {
+				namedDups[original] = append(namedDups[original], file.Path)
+			}
+		}
+		files = files[1:]
+	}
+
+}
+
+func searchDups() {
+
 }
 
 func runDuplicates(cmd *cobra.Command, args []string) {
-
 	var full int = 0
 	var partial int = 0
 	// Gets the pool of files to handle
@@ -58,6 +92,11 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 		files = common.ReadFilesRecursive(CWD)
 	} else {
 		files = common.ReadFiles(CWD)
+	}
+
+	if name, _ := cmd.Flags().GetBool("name"); name {
+		sameNameDup(files)
+		return
 	}
 
 	color.Cyan("Size hashing...")

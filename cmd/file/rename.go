@@ -161,16 +161,13 @@ func init() {
 }
 
 // Checks if any files were renamed in the process
-func changesWereMade(originalFiles []string, changedFiles []string) (sentinel bool) {
-	sentinel = false
+func changesWereMade(originalFiles []string, changedFiles []string) bool {
 	for index := range originalFiles {
 		if originalFiles[index] != changedFiles[index] {
-			sentinel = true
-			break
+			return true
 		}
 	}
-
-	return sentinel
+	return false
 }
 
 // Save records of the renaming operations

@@ -12,8 +12,15 @@ import (
 )
 
 type FileStats struct {
-	Info os.FileInfo
-	Path string
+	Info     os.FileInfo
+	Path     string
+	Filename string
+}
+
+func GetFilename(path string) string {
+	sep := string(os.PathSeparator)
+	tokens := strings.Split(path, sep)
+	return tokens[len(tokens)-1]
 }
 
 func ReadFiles(path string) (files []FileStats) {
@@ -25,8 +32,9 @@ func ReadFiles(path string) (files []FileStats) {
 	for _, file := range dirFiles {
 		if !file.IsDir() {
 			files = append(files, FileStats{
-				Info: file,
-				Path: filepath.Join(path, file.Name()),
+				Info:     file,
+				Path:     filepath.Join(path, file.Name()),
+				Filename: file.Name(),
 			})
 		}
 	}
@@ -78,8 +86,9 @@ func ReadFilesRecursive(path string) (files []FileStats) {
 
 			if !info.IsDir() {
 				files = append(files, FileStats{
-					Info: info,
-					Path: path,
+					Info:     info,
+					Path:     path,
+					Filename: GetFilename(path),
 				})
 			}
 			return nil

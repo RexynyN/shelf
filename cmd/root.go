@@ -1,5 +1,5 @@
 /*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
+Copyright © 2023 Breno Nogueira breno.s.nogueira@gmail.com
 */
 package cmd
 
@@ -15,7 +15,7 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "shelf",
-	Short: "A nifty CLI tool for file system power user",
+	Short: "A nifty CLI tool for the file system power user",
 	Long:  ``,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
