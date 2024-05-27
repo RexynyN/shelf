@@ -17,6 +17,24 @@ type FileStats struct {
 	Filename string
 }
 
+func Map[T, U any](ts []T, f func(T) U) []U {
+	us := make([]U, len(ts))
+	for i := range ts {
+		us[i] = f(ts[i])
+	}
+	return us
+}
+
+func Filter[T any](array []T, funct func(T) bool) []T {
+	filtered := make([]T, 1)
+	for _, item := range array {
+		if funct(item) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 func GetFilename(path string) string {
 	sep := string(os.PathSeparator)
 	tokens := strings.Split(path, sep)

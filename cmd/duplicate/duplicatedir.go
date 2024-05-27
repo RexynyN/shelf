@@ -1,4 +1,4 @@
-package file
+package duplicate
 
 import (
 	"github.com/spf13/cobra"

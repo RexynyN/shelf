@@ -1,19 +1,26 @@
-package file
+package duplicate
 
 import (
 	"crypto/sha1"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"shelf/common"
-	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+type NamedDuplicate struct {
+	Path       string
+	Filename   string
+	IsNumbered bool
+}
 
 type Duplicate struct {
 	Stats        common.FileStats
@@ -30,6 +37,8 @@ var DuplicateCmd = &cobra.Command{
 
 var CWD string = common.GetCwd()
 var files []common.FileStats
+var flags *pflag.FlagSet
+var deleteMessages []string = []string{"danger", "permanent", "delete", "loop", "fallback", "backup", "oxymoron", "responsability", "deletion"}
 
 // Initialize the command
 func init() {
@@ -41,61 +50,28 @@ func init() {
 	// Fate of the duplicates
 	DuplicateCmd.Flags().BoolP("quarantine", "q", false, "Quarantines the duplicates in a subdirectory to be manually handled.")
 	DuplicateCmd.Flags().BoolP("remove", "r", false, color.RedString("Deletes all duplicates (cannot be undone, be sure of what you're doing)"))
+	DuplicateCmd.Flags().String("spare", "oldest", "Strategy for sparing duplicates. Options ['oldest' (Default), 'newest', 'random', 'first', 'biggest', 'smallest'] ")
 
 	// Security
 	DuplicateCmd.Flags().BoolP("enforce", "e", false, "Enforces the files are down-to-the-byte clones to apply its fate.")
 
 	// Methods of finding duplicates
-	// DuplicateCmd.Flags().BoolP("enforce", "e", false, "Enforces the files are down-to-the-byte clones to apply its fate.")
-}
-
-func detectDupNumbering(filename string) (bool, string) {
-	name := common.GetPureFilename(filename)
-	if !strings.HasSuffix(name, ")") || !strings.Contains(name, "(") {
-		return false, filename
-	}
-
-	// Get the content of the last parenthesis to confirm if it is a number
-	parStart, parEnd := strings.LastIndex(name, "("), strings.LastIndex(name, ")")
-	content := name[parStart+1 : parEnd]
-	if _, err := strconv.Atoi(content); err != nil {
-		return false, filename
-	}
-	return true, strings.TrimSpace(strings.ReplaceAll(filename, "("+content+")", ""))
-}
-
-func sameNameDup(files []common.FileStats) {
-	namedDups := make(map[string][]string)
-	for len(files) != 0 {
-		_, original := detectDupNumbering(files[0].Filename)
-		namedDups[original] = append(namedDups[original], files[0].Path)
-		for _, file := range files {
-			if strings.HasPrefix(file.Filename, original) {
-				namedDups[original] = append(namedDups[original], file.Path)
-			}
-		}
-		files = files[1:]
-	}
-
-}
-
-func searchDups() {
-
 }
 
 func runDuplicates(cmd *cobra.Command, args []string) {
-	var full int = 0
-	var partial int = 0
+	flags = cmd.Flags()
+	full, partial := 0, 0
+
 	// Gets the pool of files to handle
 	color.Cyan("Reading files...")
-	if search, _ := cmd.Flags().GetBool("search"); search {
+	if search, _ := flags.GetBool("search"); search {
 		files = common.ReadFilesRecursive(CWD)
 	} else {
 		files = common.ReadFiles(CWD)
 	}
 
-	if name, _ := cmd.Flags().GetBool("name"); name {
-		sameNameDup(files)
+	if name, _ := flags.GetBool("name"); name {
+		searchNamedDups(files)
 		return
 	}
 
@@ -121,7 +97,7 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	printDups, _ := cmd.Flags().GetBool("quiet")
+	printDups, _ := flags.GetBool("quiet")
 	printDups = !printDups
 
 	// 3. For files with the same hash on the first 1k bytes, calculate the hash on the full contents - files with matching ones are NOT unique.
@@ -160,26 +136,19 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 	fmt.Println("Full ", full)
 
 	// Fate of the duplicates
-	// Quarantine them
-	if quarantine, _ := cmd.Flags().GetBool("quarantine"); quarantine {
-		common.CreatePath("__duplicates__")
-
-		dupPath := filepath.Join(common.GetCwd(), "__duplicates__")
-		index := 0
-		for _, array := range duplicates {
-			intraPath := filepath.Join(dupPath, fmt.Sprint(index))
-			common.CreatePath(intraPath)
-			for _, stats := range array {
-				// Ignore the error because if we hit a miss, it's a duplicated entry in the slice
-				// (We hate having to manually write a set to prevent dups)
-				_ = os.Rename(stats.Path, filepath.Join(intraPath, stats.Info.Name()))
+	if remove, _ := flags.GetBool("remove"); remove {
+		color.Red("Getting ready to delete the duplicatres, I hope you know what you're doing...")
+		magicWord := deleteMessages[rand.Intn(len(deleteMessages))]
+		color.Yellow("Type the following word to guarantee that you wanna PERMANENTLY DELETE these files: '%s'", magicWord)
+		typed := ""
+		for {
+			fmt.Scanf("%s", &typed)
+			if typed == magicWord {
+				break
 			}
-			index++
+			color.Red("That's not the right word, try again. (If want to cancel the deletion, press CTRL+C)")
 		}
-	}
 
-	// REMOVE THEM
-	if remove, _ := cmd.Flags().GetBool("remove"); remove {
 		spared := ""
 		for _, array := range duplicates {
 			for index, stats := range array {
@@ -199,6 +168,21 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 					color.Yellow("Spared: %s", printer)
 				}
 			}
+		}
+	} else if quarantine, _ := flags.GetBool("quarantine"); quarantine {
+		common.CreatePath("__duplicates__")
+
+		dupPath := filepath.Join(common.GetCwd(), "__duplicates__")
+		index := 0
+		for _, array := range duplicates {
+			intraPath := filepath.Join(dupPath, fmt.Sprint(index))
+			common.CreatePath(intraPath)
+			for _, stats := range array {
+				// Ignore the error because if we hit a miss, it's a duplicated entry in the slice
+				// (We hate having to manually write a set to prevent dups)
+				_ = os.Rename(stats.Path, filepath.Join(intraPath, stats.Info.Name()))
+			}
+			index++
 		}
 	}
 }

@@ -1,7 +1,5 @@
 import os
-from os import system
-from os import rename
-from os import remove
+from os import system, rename, remove
 from platform import system as sysname
 
 def assert_file(path: str):

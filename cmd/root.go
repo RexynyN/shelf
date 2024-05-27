@@ -6,7 +6,9 @@ package cmd
 import (
 	"os"
 
+	"shelf/cmd/duplicate"
 	"shelf/cmd/file"
+
 	"shelf/cmd/singles"
 
 	"github.com/spf13/cobra"
@@ -33,7 +35,7 @@ func init() {
 	// Finished Commands
 	rootCmd.AddCommand(singles.WhoamiCmd)
 	rootCmd.AddCommand(file.RenameCmd)
-	rootCmd.AddCommand(file.DuplicateCmd)
+	rootCmd.AddCommand(duplicate.DuplicateCmd)
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
