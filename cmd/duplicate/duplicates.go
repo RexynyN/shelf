@@ -27,43 +27,34 @@ type Duplicate struct {
 	OriginalPath string
 }
 
-var DuplicateCmd = &cobra.Command{
-	Use:     "duplicates",
-	Short:   "Find duplicated files using a set of utilities for more precise or loose parameters.",
-	Example: "// TODO",
-	Long:    ``,
-	Run:     runDuplicates,
-}
+var (
+	DuplicateCmd = &cobra.Command{
+		Use:     "duplicates",
+		Short:   "Find duplicated files using a set of utilities for more precise or loose parameters.",
+		Example: "shelf file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nshelf file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
+		Long:    "",
+		Run:     runDuplicates,
+	}
+	CWD            = common.GetCwd()
+	files          []common.FileStats
+	flags          *pflag.FlagSet
+	deleteMessages = []string{"danger", "permanent", "delete", "loop", "fallback", "backup", "oxymoron", "responsibility", "deletion"}
+)
 
-var CWD string = common.GetCwd()
-var files []common.FileStats
-var flags *pflag.FlagSet
-var deleteMessages []string = []string{"danger", "permanent", "delete", "loop", "fallback", "backup", "oxymoron", "responsability", "deletion"}
-
-// Initialize the command
 func init() {
-	// Constraints
 	DuplicateCmd.Flags().BoolP("search", "s", false, "Search recursively within the current directory for duplicates.")
-	DuplicateCmd.Flags().Bool("quiet", false, "Hides all logs of found duplicates, just prints essencial information")
-	DuplicateCmd.Flags().BoolP("name", "n", false, "Search for same-name files (homonymous) within the directory, including files with a number suffix. Eg. 'file (1).jpg'")
-
-	// Fate of the duplicates
+	DuplicateCmd.Flags().Bool("quiet", false, "Hides all logs of found duplicates, just prints essential information.")
+	DuplicateCmd.Flags().BoolP("name", "n", false, "Search for same-name files (homonymous) within the directory, including files with a number suffix. Eg. 'file (1).jpg'.")
 	DuplicateCmd.Flags().BoolP("quarantine", "q", false, "Quarantines the duplicates in a subdirectory to be manually handled.")
-	DuplicateCmd.Flags().BoolP("remove", "r", false, color.RedString("Deletes all duplicates (cannot be undone, be sure of what you're doing)"))
-	DuplicateCmd.Flags().String("spare", "oldest", "Strategy for sparing duplicates. Options ['oldest' (Default), 'newest', 'random', 'first', 'biggest', 'smallest'] ")
-
-	// Security
+	DuplicateCmd.Flags().BoolP("remove", "r", false, color.RedString("Deletes all duplicates (cannot be undone, be sure of what you're doing)."))
+	DuplicateCmd.Flags().String("spare", "oldest", "Strategy for sparing duplicates. Options ['oldest' (Default), 'newest', 'random', 'first', 'biggest', 'smallest'].")
 	DuplicateCmd.Flags().BoolP("enforce", "e", false, "Enforces the files are down-to-the-byte clones to apply its fate.")
-
-	// Methods of finding duplicates
 }
 
 func runDuplicates(cmd *cobra.Command, args []string) {
 	flags = cmd.Flags()
-	full, partial := 0, 0
-
-	// Gets the pool of files to handle
 	color.Cyan("Reading files...")
+
 	if search, _ := flags.GetBool("search"); search {
 		files = common.ReadFilesRecursive(CWD)
 	} else {
@@ -75,151 +66,154 @@ func runDuplicates(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	color.Cyan("Size hashing...")
-	// 1. Buildup a hash table of the files, where the filesize is the key.
-	hash_size := make(map[int64][]common.FileStats)
-	for i := range files {
-		hash_size[files[i].Info.Size()] = append(hash_size[files[i].Info.Size()], files[i])
-	}
+	sizeHash := groupByFileSize(files)
+	partialCount := len(sizeHash)
 
-	color.Cyan("Byte hashing...")
-	// 2. For files with the same size, create a hash table with the hash of their first 1024 bytes; non-colliding elements are unique
-	hash_1k := make(map[string][]common.FileStats)
-	for _, files := range hash_size {
-		if len(files) < 2 {
+	firstChunkHash := hashFirstChunks(sizeHash)
+	duplicates, fullCount := findFullDuplicates(firstChunkHash)
+
+	printResults(partialCount, fullCount, duplicates)
+	handleDuplicates(duplicates)
+}
+
+func groupByFileSize(files []common.FileStats) map[int64][]common.FileStats {
+	color.Cyan("Grouping files by size...")
+	sizeHash := make(map[int64][]common.FileStats)
+	for _, file := range files {
+		size := file.Info.Size()
+		sizeHash[size] = append(sizeHash[size], file)
+	}
+	return sizeHash
+}
+
+func hashFirstChunks(sizeHash map[int64][]common.FileStats) map[string][]common.FileStats {
+	color.Cyan("Hashing first 1024 bytes of files...")
+
+	chunkHash := make(map[string][]common.FileStats)
+	for _, group := range sizeHash {
+		if len(group) < 2 {
 			continue
 		}
 
-		partial += len(files)
-		for _, stats := range files {
-			hashSmall := getHash(stats.Path, true)
-			hash_1k[hashSmall] = append(hash_1k[hashSmall], stats)
+		for _, file := range group {
+			hash := getHash(file.Path, true)
+			chunkHash[hash] = append(chunkHash[hash], file)
 		}
 	}
+	return chunkHash
+}
 
-	printDups, _ := flags.GetBool("quiet")
-	printDups = !printDups
+func findFullDuplicates(chunkHash map[string][]common.FileStats) (map[string][]common.FileStats, int) {
+	color.Cyan("Finding full duplicates by hashing entire files...")
 
-	// 3. For files with the same hash on the first 1k bytes, calculate the hash on the full contents - files with matching ones are NOT unique.
 	duplicates := make(map[string][]common.FileStats)
-	hash_full := make(map[string]common.FileStats)
-	color.Cyan("Searching for duplicates through Hashes...")
-	for _, files := range hash_1k {
-		if len(files) < 2 {
-			continue // This hash is unique, no files in the map has the same
+	fullHashes := make(map[string]common.FileStats)
+	fullCount := 0
+
+	for _, group := range chunkHash {
+		if len(group) < 2 {
+			continue
 		}
 
-		// Iterate through the underlying array in the hashmap entry
-		for _, stats := range files {
-			// Get the hash for the entire file
-			fullHash := getHash(stats.Path, false)
-			duplicate, ok := hash_full[fullHash]
-
-			// If the duplicate exists
-			if ok {
-				// Print the result
-				if printDups {
-					full++
-					original := strings.ReplaceAll(stats.Path, CWD, "")
-					dup := strings.ReplaceAll(duplicate.Path, CWD, "")
-					color.Green("Duplicate found: %s and %s\n", dup, original)
-				}
-				// Append to the map
-				duplicates[fullHash] = append(duplicates[fullHash], duplicate, stats)
+		for _, file := range group {
+			hash := getHash(file.Path, false)
+			if original, exists := fullHashes[hash]; exists {
+				duplicates[hash] = append(duplicates[hash], original, file)
+				fullCount++
 			} else {
-				hash_full[fullHash] = stats
+				fullHashes[hash] = file
 			}
 		}
 	}
+	return duplicates, fullCount
+}
 
-	fmt.Println("Partial ", partial)
-	fmt.Println("Full ", full)
+func printResults(partialCount, fullCount int, duplicates map[string][]common.FileStats) {
+	if quiet, _ := flags.GetBool("quiet"); quiet {
+		return
+	}
 
-	// Fate of the duplicates
-	if remove, _ := flags.GetBool("remove"); remove {
-		color.Red("Getting ready to delete the duplicatres, I hope you know what you're doing...")
-		magicWord := deleteMessages[rand.Intn(len(deleteMessages))]
-		color.Yellow("Type the following word to guarantee that you wanna PERMANENTLY DELETE these files: '%s'", magicWord)
-		typed := ""
-		for {
-			fmt.Scanf("%s", &typed)
-			if typed == magicWord {
-				break
-			}
-			color.Red("That's not the right word, try again. (If want to cancel the deletion, press CTRL+C)")
-		}
-
-		spared := ""
-		for _, array := range duplicates {
-			for index, stats := range array {
-				// The first element of the array is always spared, whichever it is
-				if index != 0 {
-					if stats.Path == spared {
-						continue
-					}
-
-					err := os.Remove(stats.Path)
-					if err != nil {
-						log.Fatal(err)
-					}
-				} else {
-					spared = stats.Path
-					printer := strings.ReplaceAll(stats.Path, CWD, "")
-					color.Yellow("Spared: %s", printer)
-				}
-			}
-		}
-	} else if quarantine, _ := flags.GetBool("quarantine"); quarantine {
-		common.CreatePath("__duplicates__")
-
-		dupPath := filepath.Join(common.GetCwd(), "__duplicates__")
-		index := 0
-		for _, array := range duplicates {
-			intraPath := filepath.Join(dupPath, fmt.Sprint(index))
-			common.CreatePath(intraPath)
-			for _, stats := range array {
-				// Ignore the error because if we hit a miss, it's a duplicated entry in the slice
-				// (We hate having to manually write a set to prevent dups)
-				_ = os.Rename(stats.Path, filepath.Join(intraPath, stats.Info.Name()))
-			}
-			index++
+	color.Cyan("Partial matches: %d", partialCount)
+	color.Cyan("Full matches: %d", fullCount)
+	for hash, group := range duplicates {
+		for _, file := range group {
+			path := strings.ReplaceAll(file.Path, CWD, "")
+			color.Green("Duplicate: %s [Hash: %s]", path, hash)
 		}
 	}
 }
 
-// Get the hash of a file, with a flag to return the fist 1024 bytes chunk
+func handleDuplicates(duplicates map[string][]common.FileStats) {
+	if remove, _ := flags.GetBool("remove"); remove {
+		deleteDuplicates(duplicates)
+	} else if quarantine, _ := flags.GetBool("quarantine"); quarantine {
+		quarantineDuplicates(duplicates)
+	}
+}
+
+func deleteDuplicates(duplicates map[string][]common.FileStats) {
+	color.Red("Preparing to delete duplicates. Make sure you know what you're doing.")
+	magicWord := deleteMessages[rand.Intn(len(deleteMessages))]
+	color.Yellow("Type '%s' to confirm deletion:", magicWord)
+
+	var typed string
+	for {
+		fmt.Scanf("%s", &typed)
+		if typed == magicWord {
+			break
+		}
+		color.Red("Incorrect word. Try again.")
+	}
+
+	for _, group := range duplicates {
+		for i, file := range group {
+			if i > 0 {
+				if err := os.Remove(file.Path); err != nil {
+					log.Printf("Failed to delete %s: %v", file.Path, err)
+				}
+			}
+		}
+	}
+}
+
+func quarantineDuplicates(duplicates map[string][]common.FileStats) {
+	color.Cyan("Quarantining duplicates...")
+
+	quarantineDir := filepath.Join(CWD, "__duplicates__")
+	common.CreatePath(quarantineDir)
+
+	for index, group := range duplicates {
+		groupDir := filepath.Join(quarantineDir, fmt.Sprintf("group_%s", index))
+		common.CreatePath(groupDir)
+		for _, file := range group {
+			newPath := filepath.Join(groupDir, file.Info.Name())
+			if err := os.Rename(file.Path, newPath); err != nil {
+				log.Printf("Failed to quarantine %s: %v", file.Path, err)
+			}
+		}
+	}
+}
+
 func getHash(path string, firstChunk bool) string {
-	// Open file
 	file, err := os.Open(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to open file %s: %v", path, err)
 	}
 	defer file.Close()
 
 	hash := sha1.New()
 	if firstChunk {
-		// Read the first 1024 bytes
-		bytesSlice := make([]byte, 1024)
-		read, err := file.Read(bytesSlice)
-
-		// 1024 bytes is an arbitrary number, but a file may have less than 1024 bytes
-		// so make an extra case for that.
-		if err != nil && read < 1024 {
-			bytesSlice = make([]byte, read)
-			file.Read(bytesSlice)
-		} else if err != nil {
-			log.Fatal(err) // Log if any other error occured
+		buffer := make([]byte, 1024)
+		bytesRead, err := file.Read(buffer)
+		if err != nil && err != io.EOF {
+			log.Fatalf("Failed to read file %s: %v", path, err)
 		}
-
-		hash.Write(bytesSlice)
+		hash.Write(buffer[:bytesRead])
 	} else {
-		// Get all the file contents and make a hash
-		io.Copy(hash, file)
-		if err != nil {
-			log.Fatal(err)
+		if _, err := io.Copy(hash, file); err != nil {
+			log.Fatalf("Failed to hash file %s: %v", path, err)
 		}
 	}
-	// Digest the hash
-	sha1_hash := hash.Sum(nil)
-	return string(sha1_hash)
+
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }

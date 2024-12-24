@@ -1,19 +1,22 @@
 package duplicate
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
-// var DuplicateDirCmd = &cobra.Command{
-// 	Use:     "duplicate",
-// 	Short:   "Rename a file or a directory of files using various utilities.",
-// 	Example: "glow file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nglow file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
-// 	Long:    ``,
-// 	Run:     runDuplicateDir,
-// }
+var DuplicateDirCmd = &cobra.Command{
+	Use:     "duplicate",
+	Short:   "Rename a file or a directory of files using various utilities.",
+	Example: "glow file rename --extensions \"mp4,png\" --startsWith \"abc\" --endsWith \"123\" --replace \"abc\" --to \"\"\nglow file rename --iterate number --to \"BOGUS VOLUME {}\" --toTitle",
+	Long:    ``,
+	Run:     runDuplicateDir,
+}
 
 func runDuplicateDir(cmd *cobra.Command, args []string) {
-	return
+	fmt.Printf("%v\n", cmd)
+	fmt.Printf("%v\n", args)
 }
 
 // Initialize the command

@@ -2,12 +2,12 @@ package duplicate
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
+	"regexp"
 	"shelf/common"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,47 +18,41 @@ func removeIndexes(items []common.FileStats, idxs []int) []common.FileStats {
 	if len(idxs) == 0 {
 		return items
 	}
-
-	// Put the last item in the position of the deleted item, so it's faster
-	items[idxs[0]] = items[len(items)-1]
+	items[idxs[0]] = items[len(items)-1] // Substitui o item removido pelo último
 	items = items[:len(items)-1]
 	return removeIndexes(items, idxs[1:])
 }
 
-func detectDupNumbering(filename string) (bool, string) {
-	name := common.GetPureFilename(filename)
-	if !strings.Contains(name, ")") || !strings.Contains(name, "(") {
-		return false, filename
-	}
+// IsNamedDuplicate verifica se o nome do arquivo é um named duplicate, incluindo múltiplas numerações
+func isNamedDuplicate(filename string) (bool, string) {
+	baseFilename := strings.TrimSuffix(filename, filepath.Ext(filename))
 
-	// Get the content of the last parenthesis to confirm if it is a number
-	parStart, parEnd := strings.LastIndex(name, "("), strings.LastIndex(name, ")")
-	content := name[parStart+1 : parEnd]
-	if _, err := strconv.Atoi(content); err != nil {
-		return false, filename
-	}
+	// Verifica o padrão com múltiplas numerações " (N)" no final do nome antes da extensão
+	re := regexp.MustCompile(`^(.*?)( \(\d+\))+$`)
+	matches := re.FindStringSubmatch(baseFilename)
 
-	// Returns the filename without the numbered part
-	return true, strings.TrimSpace(strings.ReplaceAll(filename, "("+content+")", ""))
+	if len(matches) > 1 {
+		return true, strings.TrimSpace(matches[1]) + filepath.Ext(filename)
+	}
+	return false, filename
 }
 
 func sameNameDups(files []common.FileStats) map[string][]NamedDuplicate {
 	namedDups := make(map[string][]NamedDuplicate)
 	for len(files) != 0 {
-		numbered, original := detectDupNumbering(files[0].Filename)
+		numbered, original := isNamedDuplicate(files[0].Filename)
 		dup := NamedDuplicate{
 			Path:       files[0].Path,
 			Filename:   files[0].Filename,
 			IsNumbered: numbered,
 		}
 		namedDups[original] = append(namedDups[original], dup)
-		// Get the first file out of the way
 		files = files[1:]
 
 		removeIdxs := make([]int, 0)
 		for idx, file := range files {
 			if strings.HasPrefix(file.Filename, original) {
-				numbered, _ := detectDupNumbering(file.Filename)
+				numbered, _ := isNamedDuplicate(file.Filename)
 				dup := NamedDuplicate{
 					Path:       file.Path,
 					Filename:   file.Filename,
@@ -68,183 +62,145 @@ func sameNameDups(files []common.FileStats) map[string][]NamedDuplicate {
 				removeIdxs = append(removeIdxs, idx)
 			}
 		}
-		fmt.Println(namedDups[original])
 		files = removeIndexes(files, removeIdxs)
 	}
 	return namedDups
 }
 
 func printFate(dups []NamedDuplicate, spared NamedDuplicate) {
-	sparedFile := spared.Path
 	for _, stats := range dups {
-		fmt.Println("	- ", stats.Path)
+		color.Cyan("\t- %s", stats.Path)
 	}
-	color.Yellow("Spared: %s \n", sparedFile)
+	color.Yellow("Spared: %s\n", spared.Path)
 }
 
-// func quarantineFate(dups []NamedDuplicate, spared NamedDuplicate) {
-// 	dupPath := filepath.Join(common.GetCwd(), "__duplicates__")
-// 	intraPath := filepath.Join(dupPath, fmt.Sprint(index))
-// 	common.CreatePath(intraPath)
-// 	for _, stats := range dups {
-// 		// Ignore the error because if we hit a miss, it's a duplicated entry in the slice
-// 		// (We hate having to manually write a set to prevent dups)
-// 		_ = os.Rename(stats.Path, filepath.Join(intraPath, common.GetPureFilename(stats.Filename)))
-// 	}
-// }
+func quarantineFate(dups []NamedDuplicate, spared NamedDuplicate) {
+	dupPath := filepath.Join(common.GetCwd(), "__duplicates__")
+	common.CreatePath(dupPath)
+
+	for _, stats := range dups {
+		if stats.Path == spared.Path {
+			continue
+		}
+		newPath := filepath.Join(dupPath, stats.Filename)
+		if err := os.Rename(stats.Path, newPath); err != nil {
+			color.Red("Failed to move file %s: %v", stats.Path, err)
+		} else {
+			color.Green("Quarantined: %s -> %s", stats.Path, newPath)
+		}
+	}
+}
 
 func removeFate(dups []NamedDuplicate, spared NamedDuplicate) {
-	color.Red("Getting ready to delete the duplicatres, I hope you know what you're doing...")
+	color.Red("Getting ready to delete the duplicates. Be cautious!")
 	magicWord := deleteMessages[rand.Intn(len(deleteMessages))]
-	color.Yellow("Type the following word to guarantee that you wanna PERMANENTLY DELETE these files: '%s'", magicWord)
-	typed := ""
+	color.Yellow("Type '%s' to confirm deletion:", magicWord)
+	var typed string
 	for {
 		fmt.Scanf("%s", &typed)
 		if typed == magicWord {
 			break
 		}
-		color.Red("That's not the right word, try again. (If want to cancel the deletion, press CTRL+C)")
+		color.Red("Incorrect word. Try again or press CTRL+C to cancel.")
 	}
 
-	sparedFile := spared.Filename
 	for _, stats := range dups {
-		if stats.Path == sparedFile {
+		if stats.Path == spared.Path {
 			continue
 		}
-
-		err := os.Remove(stats.Path)
-		if err != nil {
-			log.Fatal(err)
+		if err := os.Remove(stats.Path); err != nil {
+			color.Red("Failed to delete file %s: %v", stats.Path, err)
+		} else {
+			color.Green("Deleted: %s", stats.Path)
 		}
 	}
-	color.Yellow("Spared: %s", strings.ReplaceAll(sparedFile, CWD, ""))
+	color.Yellow("Spared: %s", spared.Path)
 }
 
 func pickSpareDup(dups []NamedDuplicate) NamedDuplicate {
 	strat, _ := flags.GetString("spare")
-
 	switch strings.ToLower(strat) {
-	// IT USES THE MODIFICATION TIME, NOT THE CREATED AT TIME!!
-	case "oldest", "old":
-		oldest, date := dups[0], time.Now().Unix()
-		for _, file := range dups {
-			fi, err := os.Stat(file.Path)
-			if err != nil {
-				color.Red("The file %s couldn't be opened to compare its modification date, skipping...", file.Filename)
-				continue
-			}
-
-			mod := fi.ModTime().Unix()
-			if mod < date {
-				oldest = file
-				date = mod
-			}
-		}
-		return oldest
-
-	// IT USES THE MODIFICATION TIME, NOT THE CREATED AT TIME!!²
-	case "newest", "new":
-		newest, date := dups[0], int64(0)
-		for _, file := range dups {
-			fi, err := os.Stat(file.Path)
-			if err != nil {
-				color.Red("The file %s couldn't be opened to compare its modification date, skipping...", file.Filename)
-				continue
-			}
-
-			mod := fi.ModTime().Unix()
-			if mod > date {
-				newest = file
-				date = mod
-			}
-		}
-		return newest
-
-	// Should be treated as random, because we can't guarantee what file is gonna be the first
-	case "first":
-		return dups[0]
-
+	case "oldest":
+		return pickOldest(dups)
+	case "newest":
+		return pickNewest(dups)
 	case "random":
 		return dups[rand.Intn(len(dups))]
-
-	case "biggest", "big":
-		biggest, bSize := dups[0], int64(0)
-		for _, file := range dups {
-			fi, err := os.Stat(file.Path)
-			if err != nil {
-				color.Red("The file %s couldn't be opened to compare its size, skipping...", file.Filename)
-				continue
-			}
-
-			size := fi.Size()
-			if size > bSize {
-				biggest = file
-				bSize = size
-			}
-		}
-
-		return biggest
-
-	case "smallest", "small":
-		smallest, sSize := dups[0], int64(math.MaxInt64)
-		for _, file := range dups {
-			fi, err := os.Stat(file.Path)
-			if err != nil {
-				color.Red("The file '%s' couldn't be opened to compare its size, skipping...", file.Filename)
-				continue
-			}
-
-			size := fi.Size()
-			if size > sSize {
-				smallest = file
-				sSize = size
-			}
-		}
-		return smallest
-
+	case "biggest":
+		return pickBiggest(dups)
+	case "smallest":
+		return pickSmallest(dups)
 	default:
-		color.Red("The given spare option '%s' is not valid! Give a valid option and try again.", strat)
+		color.Red("Invalid spare option: %s", strat)
 		os.Exit(1)
 	}
-
 	return dups[0]
 }
 
 func applyFate(dups []NamedDuplicate, spared NamedDuplicate) {
 	if remove, _ := flags.GetBool("remove"); remove {
 		removeFate(dups, spared)
-	} else if quan, _ := flags.GetBool("remove"); quan {
-		color.Red("Nuh uh")
-		// quarantineFate(dups, spared)
+	} else if quarantine, _ := flags.GetBool("quarantine"); quarantine {
+		quarantineFate(dups, spared)
 	} else {
 		printFate(dups, spared)
 	}
-
-}
-
-// TODO: Use this to create a "canonical" strat (which the unique not-numbered dup is the spared, if more than one exists, fallback to another strat)
-func isNumbered(dup NamedDuplicate) bool {
-	return dup.IsNumbered
-}
-
-func isNotNumbered(dup NamedDuplicate) bool {
-	return !dup.IsNumbered
 }
 
 func searchNamedDups(files []common.FileStats) {
-	// Not the best place to put this, but I really do not care
-	if quan, _ := flags.GetBool("quarantine"); quan {
-		common.CreatePath("__duplicates__")
-	}
-
 	namedDups := sameNameDups(files)
 	for _, dups := range namedDups {
-		// No named duplicate
-		if len(dups) == 1 {
+		if len(dups) <= 1 {
 			continue
 		}
-
-		// Find out what file to spare using the given strat
 		applyFate(dups, pickSpareDup(dups))
 	}
+}
+
+func pickOldest(dups []NamedDuplicate) NamedDuplicate {
+	oldest, minTime := dups[0], time.Now().Unix()
+	for _, file := range dups {
+		if fi, err := os.Stat(file.Path); err == nil {
+			if modTime := fi.ModTime().Unix(); modTime < minTime {
+				oldest, minTime = file, modTime
+			}
+		}
+	}
+	return oldest
+}
+
+func pickNewest(dups []NamedDuplicate) NamedDuplicate {
+	newest, maxTime := dups[0], int64(0)
+	for _, file := range dups {
+		if fi, err := os.Stat(file.Path); err == nil {
+			if modTime := fi.ModTime().Unix(); modTime > maxTime {
+				newest, maxTime = file, modTime
+			}
+		}
+	}
+	return newest
+}
+
+func pickBiggest(dups []NamedDuplicate) NamedDuplicate {
+	biggest, maxSize := dups[0], int64(0)
+	for _, file := range dups {
+		if fi, err := os.Stat(file.Path); err == nil {
+			if size := fi.Size(); size > maxSize {
+				biggest, maxSize = file, size
+			}
+		}
+	}
+	return biggest
+}
+
+func pickSmallest(dups []NamedDuplicate) NamedDuplicate {
+	smallest, minSize := dups[0], int64(math.MaxInt64)
+	for _, file := range dups {
+		if fi, err := os.Stat(file.Path); err == nil {
+			if size := fi.Size(); size < minSize {
+				smallest, minSize = file, size
+			}
+		}
+	}
+	return smallest
 }
