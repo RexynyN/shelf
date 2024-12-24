@@ -223,13 +223,13 @@ func applyFate(dups []NamedDuplicate, spared NamedDuplicate) {
 }
 
 // TODO: Use this to create a "canonical" strat (which the unique not-numbered dup is the spared, if more than one exists, fallback to another strat)
-// func isNumbered(dup NamedDuplicate) bool {
-// 	return dup.IsNumbered
-// }
+func isNumbered(dup NamedDuplicate) bool {
+	return dup.IsNumbered
+}
 
-// func isNotNumbered(dup NamedDuplicate) bool {
-// 	return !dup.IsNumbered
-// }
+func isNotNumbered(dup NamedDuplicate) bool {
+	return !dup.IsNumbered
+}
 
 func searchNamedDups(files []common.FileStats) {
 	// Not the best place to put this, but I really do not care
