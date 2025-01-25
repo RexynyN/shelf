@@ -6,6 +6,7 @@ package cmd
 import (
 	"os"
 
+	"shelf/cmd/diff"
 	"shelf/cmd/duplicate"
 	"shelf/cmd/file"
 
@@ -36,6 +37,7 @@ func init() {
 	rootCmd.AddCommand(singles.WhoamiCmd)
 	rootCmd.AddCommand(file.RenameCmd)
 	rootCmd.AddCommand(duplicate.DuplicateCmd)
+	rootCmd.AddCommand(diff.DiffCmd)
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
